@@ -1,0 +1,7 @@
+,,StartUpCost,PowerSyn,SUDuration,OffDuration
+BTC,1A,16,50,1,4
+BTC,2B,28,50,2,6
+BTC,3C,36,50,3,8
+BTC,4D,40,50,4,11
+BTC,5E,41,50,5,14
+Boiler,1X,41,5,1,4

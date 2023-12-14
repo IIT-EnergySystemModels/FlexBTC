@@ -1,0 +1,3 @@
+,IndCogeneration,IndFuel,MaximumPower,MinimumPower,Efficiency,Pqslope,Pqyintercept,RampUp,RampDown,UpTime,DownTime,SDDuration,CO2EmissionRate,NLCost,LVCost,ShutDownCost,OMVariableCost
+BTC,Yes,Biomass,378,150,0.8,2.6163,-10.397,80,80,4,4,2,0,200,55,20,
+Boiler,No,NaturalGas,100,10,0.8,,,20,20,4,4,2,0.2,200,55,20,
