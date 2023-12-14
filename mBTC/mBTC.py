@@ -166,7 +166,6 @@ pIndCogeneration = pIndCogeneration.map(idxDict)
 # defining subsets
 mBTC.p    = Set(initialize=mBTC.pp,         ordered=True , doc='periods'           , filter=lambda mBTC,pp: pp in mBTC.pp and pPeriodWeight[pp] >  0.0                                                   )
 mBTC.t    = Set(initialize=mBTC.tt,         ordered=True , doc='load levels'       , filter=lambda mBTC,tt: tt in mBTC.tt and pDuration    [tt] >  0                                                     )
-mBTC.t2   = Set(initialize=mBTC.tt,         ordered=True , doc='load levels'       , filter=lambda mBTC,tt: tt in mBTC.tt and pDuration    [tt] >  0                                                     )
 mBTC.g    = Set(initialize=mBTC.gg,         ordered=False, doc='generating units'  , filter=lambda mBTC,gg: gg in mBTC.gg and pMaxPower    [gg] >  0.0                                                   )
 mBTC.gc   = Set(initialize=mBTC.gg,         ordered=False, doc='cogeneration units', filter=lambda mBTC,gg: gg in mBTC.gg and pMaxPower    [gg] >  0.0 and pIndCogeneration[gg] > 0                      )
 mBTC.gx   = Set(initialize=mBTC.gg,         ordered=False, doc='thermal units'     , filter=lambda mBTC,gg: gg in mBTC.gg and pMaxPower    [gg] >  0.0 and pIndCogeneration[gg] < 1 and pNLCost[gg] > 0.0)
@@ -329,14 +328,14 @@ print('Setting up input data.................... ', round(SettingUpDataTime), 's
 #Start-up type
 
 def eStartUpType1(mBTC,p,t,gc,lc):
-    if lc < mBTC.lc.last() and  mBTC.t.ord(t) >= pOffDuration[gc,mBTC.lc.next(lc)]:
+    if lc < mBTC.lc.last() and mBTC.t.ord(t) >= pOffDuration[gc,mBTC.lc.next(lc)]:
         return mBTC.vSUType[p,t,gc,lc] <= sum(mBTC.vShutDown[p,(t-i),gc] for i in range(pOffDuration[gc,lc],(pOffDuration[gc,mBTC.lc.next(lc)]-1)+1))
     else:
         return Constraint.Skip
 mBTC.eStartUpType1 = Constraint(mBTC.ptgclc      , rule=eStartUpType1,      doc='start-up type (1a)')
 
 def eStartUpType2(mBTC,p,t,gx,lx):
-    if lx < mBTC.lx.last() and  mBTC.t.ord(t) >= pOffDuration[gx,mBTC.lx.next(lx)] and len(mBTC.lx) > 1:
+    if lx < mBTC.lx.last() and mBTC.t.ord(t) >= pOffDuration[gx,mBTC.lx.next(lx)] and len(mBTC.lx) > 1:
         return mBTC.vSUType[p,t,gx,lx] <= sum(mBTC.vShutDown[p,(t-i),gx] for i in range(pOffDuration[gx,lx],(pOffDuration[gx,mBTC.lx.next(lx)]-1)+1))
     else:
         return Constraint.Skip
@@ -555,7 +554,7 @@ def eIniSUType1(mBTC,p,t,gc,lc):
             return Constraint.Skip
     else:
         return Constraint.Skip
-mBTC.eIniSUType1 = Constraint(mBTC.ptgclc        , rule=eIniSUType1,        doc='initial commitment (15a)')
+mBTC.eIniSUType1 = Constraint(mBTC.ptgclc        , rule=eIniSUType1,        doc='initial su type (15a)')
 
 def eIniSUType2(mBTC,p,t,gx,lx):
     if len(mBTC.lx) > 1 and mBTC.pDwTime0[gx] >= 2.0:
@@ -565,7 +564,21 @@ def eIniSUType2(mBTC,p,t,gx,lx):
             return Constraint.Skip
     else:
         return Constraint.Skip
-mBTC.eIniSUType2 = Constraint(mBTC.ptgxlx        , rule=eIniSUType2,        doc='initial commitment (15b)')
+mBTC.eIniSUType2 = Constraint(mBTC.ptgxlx        , rule=eIniSUType2,        doc='initial su type (15b)')
+
+def eIniSUType3(mBTC,p,t,gc,lc):
+    if t <= pSUDuration[gc,lc]:
+        return mBTC.vSUType[p,t,gc,lc] == 0.0
+    else:
+        return Constraint.Skip
+mBTC.eIniSUType3 = Constraint(mBTC.ptgclc        , rule=eIniSUType3,        doc='initial su type (15c)')
+
+def eIniSUType4(mBTC,p,t,gx,lx):
+    if t <= pSUDuration[gx,lx]:
+        return mBTC.vSUType[p,t,gx,lx] == 0.0
+    else:
+        return Constraint.Skip
+mBTC.eIniSUType4 = Constraint(mBTC.ptgxlx        , rule=eIniSUType4,        doc='initial su type (15d)')
 
 
 #%% Objective Function
@@ -575,12 +588,12 @@ def eTotalProfit(mBTC):
 mBTC.eTotalProfit = Constraint(                    rule=eTotalProfit,       doc='total system profit [EUR]')
 
 def eTotalCost(mBTC):
-    return mBTC.vTotalCost == (sum(((mBTC.pFuelCost    [g    ] * mBTC.vFuel    [p,t,g    ])                                                            +
-                               sum( (mBTC.pStartUpCost [gc,lc] * mBTC.vSUType  [p,t,gc,lc])  for gc,lc in mBTC.gc*mBTC.lc)                             +
-                               sum( (mBTC.pStartUpCost [gx,lx] * mBTC.vSUType  [p,t,gx,lx])  for gx,lx in mBTC.gx*mBTC.lx)                             +
-                                    (mBTC.pShutDownCost[g    ] * mBTC.vShutDown[p,t,g    ])                                                            +
-                                    (mBTC.pCO2Cost * mBTC.pCO2EmissionRate[g] * mBTC.pDuration [t] * mBTC.vTotalOutput[p,t,g])) for p,t,g in mBTC.ptg) +
-                               sum((mBTC.pEnergyCost[p,t]                     * mBTC.pDuration [t] * mBTC.vPowerBuy   [p,t  ])  for p,t   in mBTC.pt  ))
+    return mBTC.vTotalCost == (sum(((mBTC.pFuelCost    [g    ] * mBTC.vFuel    [p,t,g    ])                                                       +
+                               sum( (mBTC.pStartUpCost [gc,lc] * mBTC.vSUType  [p,t,gc,lc])  for gc,lc in mBTC.gc*mBTC.lc)                        +
+                               sum( (mBTC.pStartUpCost [gx,lx] * mBTC.vSUType  [p,t,gx,lx])  for gx,lx in mBTC.gx*mBTC.lx)                        +
+                                    (mBTC.pShutDownCost[g    ] * mBTC.vShutDown[p,t,g    ])                                                       +
+                                    (mBTC.pCO2Cost * mBTC.pCO2EmissionRate[g] * mBTC.pDuration [t] * mBTC.vFuel  [p,t,g])) for p,t,g in mBTC.ptg) +
+                               sum((mBTC.pEnergyCost[p,t]                     * mBTC.pDuration [t] * mBTC.vPowerBuy[p,t])  for p,t   in mBTC.pt  ))
 mBTC.eTotalTProfit = Constraint(                   rule=eTotalCost,         doc='total system cost [EUR]')
 
 def eTotalRevenue(mBTC):
