@@ -172,10 +172,11 @@ mBTC.gc   = Set(initialize=mBTC.gg,         ordered=False, doc='cogeneration uni
 mBTC.gx   = Set(initialize=mBTC.gg,         ordered=False, doc='thermal units'     , filter=lambda mBTC,gg: gg in mBTC.gg and pMaxPower    [gg] >  0.0 and pIndCogeneration[gg] < 1 and pNLCost[gg] > 0.0)
 mBTC.l    = Set(initialize=mBTC.ll,         ordered=True , doc='su types'          , filter=lambda mBTC,ll: ll in mBTC.ll                                                                                )
 mBTC.l2   = Set(initialize=dfStartUp.index, ordered=True , doc='su types index'                                                                                                                          )
-mBTC.lc   = Set(initialize=lambda m: list(mBTC.l - {'1X'}                ), ordered=True, doc='BTC su types'                                                                                             )
-mBTC.lx   = Set(initialize=lambda m: list(mBTC.l - mBTC.lc               ), ordered=True, doc='thermal units su types'                                                                                   )
-mBTC.sdi  = Set(initialize=lambda m: list(range(1, pSDDuration.max() + 2)), ordered=True, doc='shut-down time periods'                                                                                   )
-mBTC.sui  = Set(initialize=lambda m: list(range(1, pSUDuration.max() + 2)), ordered=True, doc='start-up  time periods'                                                                                   )
+mBTC.l2c  = Set(initialize=lambda m: list(mBTC.l2 - {(g, l) for g,l in mBTC.gx*mBTC.l}), ordered=True, doc='BTC su types index'                                                                          )
+mBTC.lx   = Set(initialize=lambda m: list(mBTC.l  - {l      for g,l in mBTC.l2c      }), ordered=True, doc='thermal units su types'                                                                      )
+mBTC.lc   = Set(initialize=lambda m: list(mBTC.l  - mBTC.lx                           ), ordered=True, doc='BTC su types'                                                                                )
+mBTC.sdi  = Set(initialize=lambda m: list(range(1, pSDDuration.max() + 2)             ), ordered=True, doc='shut-down time periods'                                                                      )
+mBTC.sui  = Set(initialize=lambda m: list(range(1, pSUDuration.max() + 2)             ), ordered=True, doc='start-up  time periods'                                                                      )
 
 g2l = defaultdict(list)
 for g,l in mBTC.l2:
@@ -309,8 +310,6 @@ mBTC.vSUType              = Var(mBTC.ptgl, within=UnitInterval,     initialize=0
 mBTC.vOnlineStates        = Var(mBTC.ptg , within=UnitInterval,     initialize=0.0,                                     doc='online states of unit g                            [0,1]')
 mBTC.vPowerBuy            = Var(mBTC.pt  , within=NonNegativeReals, bounds=lambda mBTC,p,t  :(0.0, mBTC.pPDemand[p,t]), doc='power buy                                           [MW]')
 mBTC.vPowerSell           = Var(mBTC.pt  , within=NonNegativeReals, bounds=lambda mBTC,p,t  :(0.0, mBTC.pPDemand[p,t]), doc='power sell                                          [MW]')
-#mBTC.vPNS                 = Var(mBTC.pt  , within=NonNegativeReals, bounds=lambda mBTC,p,t  :(0.0, mBTC.pPDemand[p,t]), doc='power not served                                    [MW]')
-#mBTC.vQNS                 = Var(mBTC.pt  , within=NonNegativeReals, bounds=lambda mBTC,p,t  :(0.0, mBTC.pQDemand[p,t]), doc='heat  not served                                    [MW]')
 mBTC.vQExcess             = Var(mBTC.ptg , within=NonNegativeReals, bounds=lambda mBTC,p,t,g:(0.0, mBTC.pMaxPower[g]),  doc='excess produced heat                                [MW]')
 mBTC.vFuel                = Var(mBTC.ptg , within=NonNegativeReals,                                                     doc='fuel flow during loadlevel t                       [MWh]')
 mBTC.vTotalRevenue        = Var(           within=           Reals,                                                     doc='total system revenue                               [EUR]')
@@ -421,9 +420,9 @@ def eEnergyProduction1(mBTC,p,t,gc):
                                         sum((    (mBTC.pPsdi[gc,i   ] + mBTC.pPsdi[gc,   (i+1)])/2) * mBTC.vShutDown[p,(t-i+1),                   gc   ] for i in range(1,pSDDuration[gc   ]+1)) +
                                         sum(sum(((mBTC.pPsui[gc,lc,j] + mBTC.pPsui[gc,lc,(j+1)])/2) * mBTC.vSUType  [p,(t-j+pSUDuration[gc,lc]+1),gc,lc] for j in range(1,pSUDuration[gc,lc]+1)) for gc,lc in mBTC.gc*mBTC.lc))
     elif (mBTC.t.last() - pMaxSUDuration_gc) <= t <= mBTC.t.last():
-        return mBTC.vEnergy[p,t,gc] == ((mBTC.pMinPower  [gc] * mBTC.vCommitment[p,t,gc]) +
-                                       (mBTC.vOutput[p,t,gc ] + mBTC.vOutput[p,mBTC.t.prev(t),gc]) * 0.5 +
-                                       sum(((mBTC.pPsdi[gc,i] + mBTC.pPsdi[gc,(i+1)])/2) * mBTC.vShutDown[p,(t-i+1),gc] for i in range(1,pSDDuration[gc]+1)))
+        return mBTC.vEnergy[p,t,gc] == ((mBTC.pMinPower   [gc] * mBTC.vCommitment[p,t,gc]) +
+                                        (mBTC.vOutput[p,t,gc ] + mBTC.vOutput[p,mBTC.t.prev(t),gc]) * 0.5 +
+                                        sum(((mBTC.pPsdi[gc,i] + mBTC.pPsdi[gc,(i+1)])/2) * mBTC.vShutDown[p,(t-i+1),gc] for i in range(1,pSDDuration[gc]+1)))
     else:
         return Constraint.Skip
 mBTC.eEnergyProduction1 = Constraint(mBTC.ptgc   , rule=eEnergyProduction1, doc='energy production (8a)')
@@ -435,9 +434,9 @@ def eEnergyProduction2(mBTC,p,t,gx):
                                         sum((    (mBTC.pPsdi[gx,i   ] + mBTC.pPsdi[gx,   (i+1)])/2) * mBTC.vShutDown[p,(t-i+1),                   gx   ] for i in range(1,pSDDuration[gx   ]+1)) +
                                         sum(sum(((mBTC.pPsui[gx,lx,j] + mBTC.pPsui[gx,lx,(j+1)])/2) * mBTC.vSUType  [p,(t-j+pSUDuration[gx,lx]+1),gx,lx] for j in range(1,pSUDuration[gx,lx]+1)) for gx,lx in mBTC.gx*mBTC.lx))
    elif (mBTC.t.last() - pMaxSUDuration_gx) <= t <= mBTC.t.last():
-        return mBTC.vEnergy[p,t,gx] == ((mBTC.pMinPower  [gx] * mBTC.vCommitment[p,t,gx]) +
-                                       (mBTC.vOutput[p,t,gx ] + mBTC.vOutput[p,mBTC.t.prev(t),gx]) * 0.5 +
-                                       sum(((mBTC.pPsdi[gx,i] + mBTC.pPsdi[gx,(i+1)])/2) * mBTC.vShutDown[p,(t-i+1),gx] for i in range(1,pSDDuration[gx]+1)))
+        return mBTC.vEnergy[p,t,gx] == ((mBTC.pMinPower   [gx] * mBTC.vCommitment[p,t,gx]) +
+                                        (mBTC.vOutput[p,t,gx ] + mBTC.vOutput[p,mBTC.t.prev(t),gx]) * 0.5 +
+                                        sum(((mBTC.pPsdi[gx,i] + mBTC.pPsdi[gx,(i+1)])/2) * mBTC.vShutDown[p,(t-i+1),gx] for i in range(1,pSDDuration[gx]+1)))
    else:
         return Constraint.Skip
 mBTC.eEnergyProduction2 = Constraint(mBTC.ptgx   , rule=eEnergyProduction2, doc='energy production (8b)')
@@ -478,8 +477,8 @@ def eTotalPOutput1(mBTC,p,t,gc):
                                             sum((mBTC.pPsdi[gc,i] * mBTC.vShutDown[p,(t-i+2),gc]) for i in range(2, pSDDuration[gc]+1)) +
                                             sum(sum((mBTC.pPsui[gc,lc,i] * mBTC.vSUType[p,(t-i+pSUDuration[gc,lc]+2),gc,lc]) for i in range(1,pSUDuration[gc,lc]+1)) for gc,lc in mBTC.gc*mBTC.lc))
     elif   (mBTC.t.last() - pMaxSUDuration_gc) <= t <= mBTC.t.last():
-        return mBTC.vTotalOutput[p,t,gc] == ((mBTC.pMinPower[gc] * mBTC.vCommitment[p,t,gc]) + mBTC.vOutput[p,t,gc] +
-                                             sum((mBTC.pPsdi[gc,i] * mBTC.vShutDown[p,(t-i+2),gc]) for i in range(2, pSDDuration[gc]+1)))
+        return mBTC.vTotalOutput[p,t,gc] == ((mBTC.pMinPower[gc]  * mBTC.vCommitment[p,t,gc]) + mBTC.vOutput[p,t,gc] +
+                                            sum((mBTC.pPsdi[gc,i] * mBTC.vShutDown[p,(t-i+2),gc]) for i in range(2, pSDDuration[gc]+1)))
     else:
         return Constraint.Skip
 mBTC.eTotalPOutput1 = Constraint(mBTC.ptgc       , rule=eTotalPOutput1,     doc='total power output (a)')
@@ -490,8 +489,8 @@ def eTotalPOutput2(mBTC,p,t,gx):
                                             sum((mBTC.pPsdi[gx,i] * mBTC.vShutDown[p,(t-i+2),gx]) for i in range(2, pSDDuration[gx]+1)) +
                                             sum(sum((mBTC.pPsui[gx,lx,i] * mBTC.vSUType[p,(t-i+pSUDuration[gx,lx]+2),gx,lx]) for i in range(1,pSUDuration[gx,lx]+1)) for gx,lx in mBTC.gx*mBTC.lx))
     elif   (mBTC.t.last() - pMaxSUDuration_gx) <= t <= mBTC.t.last():
-        return mBTC.vTotalOutput[p,t,gx] == ((mBTC.pMinPower[gx] * mBTC.vCommitment[p,t,gx]) + mBTC.vOutput[p,t,gx] +
-                                             sum((mBTC.pPsdi[gx,i] * mBTC.vShutDown[p,(t-i+2),gx]) for i in range(2, pSDDuration[gx]+1)))
+        return mBTC.vTotalOutput[p,t,gx] == ((mBTC.pMinPower[gx]  * mBTC.vCommitment[p,t,gx]) + mBTC.vOutput[p,t,gx] +
+                                            sum((mBTC.pPsdi[gx,i] * mBTC.vShutDown[p,(t-i+2),gx]) for i in range(2, pSDDuration[gx]+1)))
     else:
         return Constraint.Skip
 mBTC.eTotalPOutput2 = Constraint(mBTC.ptgx       , rule=eTotalPOutput2,     doc='total power output (b)')
@@ -575,19 +574,6 @@ def eTotalProfit(mBTC):
     return mBTC.vTotalProfit == sum((mBTC.pEnergyPrice[p,t] * mBTC.vPowerSell[p,t] * mBTC.pDuration[t]) for p,t in mBTC.pt)
 mBTC.eTotalProfit = Constraint(                    rule=eTotalProfit,       doc='total system profit [EUR]')
 
-# def eTotalCost(mBTC):
-#     return mBTC.vTotalCost == (sum(((mBTC.pNLCost[g]                                                           * mBTC.vCommitment [p,t,g    ])                                +
-#                                     (mBTC.pLVCost[g]                                                           * mBTC.vEnergy     [p,t,g    ])                                +
-#                                sum(((mBTC.pStartUpCost [gc,lc] + (mBTC.pNLCost[gc] * mBTC.pSUDuration[gc,lc])) * mBTC.vSUType     [p,t,gc,lc])  for gc,lc in mBTC.gc*mBTC.lc) +
-#                                sum(((mBTC.pStartUpCost [gx,lx] + (mBTC.pNLCost[gx] * mBTC.pSUDuration[gx,lx])) * mBTC.vSUType     [p,t,gx,lx])  for gx,lx in mBTC.gx*mBTC.lx) +
-#                                    ((mBTC.pShutDownCost[g    ] + (mBTC.pNLCost[g ] * mBTC.pSDDuration[g    ])) * mBTC.vShutDown   [p,t,g    ])                                +
-#                                     # (mBTC.pQNSCost                                 * mBTC.pDuration  [t    ]   * mBTC.vQExcess    [p,t,g    ])                                +
-#                                     (mBTC.pCO2Cost *     mBTC.pCO2EmissionRate[g ] * mBTC.pDuration  [t    ]   * mBTC.vTotalOutput[p,t,g    ])) for p,t,g in mBTC.ptg)        +
-#                                sum(((mBTC.pPNSCost                                 * mBTC.pDuration  [t    ]   * mBTC.vPNS        [p,t      ])                                +
-#                                     (mBTC.pQNSCost                                 * mBTC.pDuration  [t    ]   * mBTC.vQNS        [p,t      ])                                +
-#                                     (mBTC.pEnergyCost[p,t]                         * mBTC.pDuration  [t    ]   * mBTC.vPowerBuy   [p,t      ])) for p,t   in mBTC.pt         ))
-# mBTC.eTotalTProfit = Constraint(                   rule=eTotalCost,         doc='total system cost [EUR]')
-
 def eTotalCost(mBTC):
     return mBTC.vTotalCost == (sum(((mBTC.pFuelCost    [g    ] * mBTC.vFuel    [p,t,g    ])                                                            +
                                sum( (mBTC.pStartUpCost [gc,lc] * mBTC.vSUType  [p,t,gc,lc])  for gc,lc in mBTC.gc*mBTC.lc)                             +
@@ -600,6 +586,7 @@ mBTC.eTotalTProfit = Constraint(                   rule=eTotalCost,         doc=
 def eTotalRevenue(mBTC):
     return mBTC.vTotalRevenue == mBTC.vTotalProfit - mBTC.vTotalCost
 mBTC.eTotalRevenue = Constraint(                   rule=eTotalRevenue,      doc='total system profit [EUR]')
+
 
 def eObjFunction(mBTC):
     return mBTC.vTotalRevenue
@@ -649,6 +636,7 @@ print('Solution time............................ ', round(SolvingTime), 's')
 print('Total system profit...................... ', round(mBTC.vTotalProfit()), '[EUR]')
 print('Total system cost........................ ', round(mBTC.vTotalCost()), '[EUR]')
 print('Total system revenue..................... ', round(mBTC.vTotalRevenue()), '[EUR]')
+
 
 #%% Final Power Schedule
 
