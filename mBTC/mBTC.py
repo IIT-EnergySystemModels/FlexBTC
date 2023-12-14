@@ -25,7 +25,7 @@ from   collections      import defaultdict
 for i in range(0, 117):
     print('-', end="")
 
-print('\nProgram for Optimizing the Operation of BTC Plant - Version 1.1.0 - November 15, 2023')
+print('\nProgram for Optimizing the Operation of BTC Plant - Version 1.2.0 - December 14th, 2023')
 print('#### Non-commercial use only ####')
 
 for i in range(0, 117):
