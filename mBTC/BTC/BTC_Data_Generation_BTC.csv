@@ -1,3 +1,4 @@
-,IndCogeneration,IndFuel,MaximumPower,MinimumPower,Efficiency,Pqslope,Pqyintercept,RampUp,RampDown,UpTime,DownTime,SDDuration,CO2EmissionRate,NLCost,LVCost,ShutDownCost,OMVariableCost
-BTC,Yes,Biomass,378,150,0.8,2.6163,-10.397,80,80,4,4,2,0,200,55,20,
-Boiler,No,NaturalGas,100,10,0.8,,,20,20,4,4,2,0.2,200,55,20,
+,IndCogeneration,IndHeatPump,IndFuel,IndOperReserve,MaximumPower,MinimumPower,Efficiency,COP,Pqslope,Pqyintercept,RampUp,RampDown,UpTime,DownTime,SDDuration,CO2EmissionRate,ShutDownCost,OMVariableCost,OperReserveCost
+BTC,Yes,No,Biomass,No,26.4,9.6,0.8,,1.1605,-5.7684,8.4,8.4,4,4,2,0,20,,
+Boiler,No,No,NaturalGas,No,10,2,0.8,,,,4,4,4,4,2,0.2,20,,
+HP,No,Yes,,No,15,7,,3,,,,,,,,0,,,

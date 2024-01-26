@@ -1,2 +1,2 @@
-,PNSCost,QNSCost,CO2Cost,TimeStep,AnnualDiscountRate,EconomicBaseYear
-Parameters,10000,10000,75,1,0,2025
+,PNSCost,QNSCost,CO2Cost,HPOperation,TimeStep,UpReserveActivation,DwReserveActivation,MinRatioDwUp,MaxRatioDwUp,AnnualDiscountRate,EconomicBaseYear
+Parameters,10000,10000,75,Yes,1,0.25,0.3,0,1,0,2025
