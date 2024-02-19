@@ -1,2 +1,0 @@
-,PNSCost,QNSCost,CO2Cost,GCPCapacity,HPOperation,TimeStep,UpReserveActivation,DwReserveActivation,MinRatioDwUp,MaxRatioDwUp,AnnualDiscountRate,EconomicBaseYear
-Parameters,1000,0.2,76,17,Yes,1,0.25,0.3,0,1,0,2021
