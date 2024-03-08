@@ -25,7 +25,7 @@ from   collections      import defaultdict
 for i in range(0, 117):
     print('-', end="")
 
-print('\nProgram for Optimizing the Operation of BTC Plant - Version 1.6.0 - February 19, 2024')
+print('\nProgram for Optimizing the Operation of BTC Plant - Version 1.7.2 - March 7, 2024')
 print('#### Non-commercial use only ####')
 
 for i in range(0, 117):
@@ -34,13 +34,13 @@ for i in range(0, 117):
 StartTime = time.time()
 
 DirName    = os.path.dirname(__file__)
-CaseName   = 'SulquisaBTC'
+CaseName   = ('CEMEXH2_Alicante')
 SolverName = 'gurobi'
 
 _path = os.path.join(DirName, CaseName)
 
 #%% Model declaration
-mBTC = ConcreteModel('Program for Optimizing the Operation of BTC Plant - Version 1.6.0 - February 19, 2024')
+mBTC = ConcreteModel('Program for Optimizing the Operation of BTC Plant - Version 1.7.2 - March 7, 2024')
 
 #%% Reading the sets
 dictSets = DataPortal()
@@ -67,7 +67,6 @@ dfStartUp            = pd.read_csv(_path+'/BTC_Data_StartUp_'           +CaseNam
 dfInitialCond        = pd.read_csv(_path+'/BTC_Data_InitialConditions_' +CaseName+'.csv', index_col=[0    ])
 dfSDTraject          = pd.read_csv(_path+'/BTC_Data_SDTrajectory_'      +CaseName+'.csv', index_col=[0,1  ])
 dfSUTraject          = pd.read_csv(_path+'/BTC_Data_SUTrajectories_'    +CaseName+'.csv', index_col=[0,1,2])
-dfOperReserve        = pd.read_csv(_path+'/BTC_Data_OperatingReserve_'  +CaseName+'.csv', index_col=[0,1  ])
 dfORPrice            = pd.read_csv(_path+'/BTC_Data_ORPrice_'           +CaseName+'.csv', index_col=[0,1  ])
 
 # substitute NaN by 0
@@ -81,7 +80,6 @@ dfFuelCost.fillna    (0.0, inplace=True)
 dfGeneration.fillna  (0.0, inplace=True)
 dfStartUp.fillna     (0.0, inplace=True)
 dfInitialCond.fillna (0.0, inplace=True)
-dfOperReserve.fillna (0.0, inplace=True)
 dfORPrice.fillna     (0.0, inplace=True)
 
 #%% general parameters
@@ -125,9 +123,6 @@ pDwTime              = dfGeneration ['DownTime'            ]                    
 pShutDownCost        = dfGeneration ['ShutDownCost'        ]                        # shutdown cost                           [EUR]
 pSDDuration          = dfGeneration ['SDDuration'          ]                        # duration of the shut-down ramp process  [h]
 pCO2ERate            = dfGeneration ['CO2EmissionRate'     ]                        # emission  rate                          [tCO2/MWh]
-pOMVarCost           = dfGeneration ['OMVariableCost'      ]                        # O&M variable cost                       [EUR/MWh]
-pN2Cost              = dfGeneration ['N2Cost'              ]                        # nitrogen cost                           [EUR/MWh]
-pOperReserveCost     = dfGeneration ['OperReserveCost'     ]                        # operating reserve cost                  [EUR/MW]
 pPowerSyn            = dfStartUp    ['PowerSyn'            ]                        # P at which the unit is synchronized     [MW]
 pStartUpCost         = dfStartUp    ['StartUpCost'         ]                        # startup  cost                           [EUR]
 pSUDuration          = dfStartUp    ['SUDuration'          ]                        # duration of the start-up l ramp process [h]
@@ -138,29 +133,20 @@ pDwTime0             = dfInitialCond['DownTime0'           ]                    
 pOutput0             = dfInitialCond['p0'                  ]                        # initial power output                    [MW]
 pPsdi                = dfSDTraject  ['Psd_i'               ]                        # P at beginning of ith interval of SD    [MW]
 pPsui                = dfSUTraject  ['Psu_i'               ]                        # P at beginning of ith interval of SU    [MW]
-pOperReserveUp       = dfOperReserve['Up'                  ]                        # upward   operating reserve              [MW]
-pOperReserveDw       = dfOperReserve['Down'                ]                        # downward operating reserve              [MW]
-pURPrice             = dfORPrice    ['Up'                  ]                        # upward   operating reserve price        [EUR/MW]
-pDRPrice             = dfORPrice    ['Down'                ]                        # downward operating reserve price        [EUR/MW]
+pORPrice             = dfORPrice    ['Price'               ]                        # secondary reserve price                 [EUR/MW]
 
 # compute the Demand as the mean over the time step load levels and assign it to active load levels.
 pPDemand             = pPDemand.rolling      (pTimeStep).mean()
 pQDemand             = pQDemand.rolling      (pTimeStep).mean()
 pEnergyCost          = pEnergyCost.rolling   (pTimeStep).mean()
 pEnergyPrice         = pEnergyPrice.rolling  (pTimeStep).mean()
-pOperReserveUp       = pOperReserveUp.rolling(pTimeStep).mean()
-pOperReserveDw       = pOperReserveDw.rolling(pTimeStep).mean()
-pURPrice             = pURPrice.rolling      (pTimeStep).mean()
-pDRPrice             = pDRPrice.rolling      (pTimeStep).mean()
+pORPrice             = pORPrice.rolling      (pTimeStep).mean()
 
 pPDemand.fillna      (0.0, inplace=True)
 pQDemand.fillna      (0.0, inplace=True)
 pEnergyCost.fillna   (0.0, inplace=True)
 pEnergyPrice.fillna  (0.0, inplace=True)
-pOperReserveUp.fillna(0.0, inplace=True)
-pOperReserveDw.fillna(0.0, inplace=True)
-pURPrice.fillna      (0.0, inplace=True)
-pDRPrice.fillna      (0.0, inplace=True)
+pORPrice.fillna      (0.0, inplace=True)
 pPsdi.fillna         (0.0, inplace=True)
 pPsui.fillna         (0.0, inplace=True)
 
@@ -248,17 +234,13 @@ pPDemand       = pPDemand.loc      [mBTC.pt     ]
 pQDemand       = pQDemand.loc      [mBTC.pt     ]
 pEnergyCost    = pEnergyCost.loc   [mBTC.pt     ]
 pEnergyPrice   = pEnergyPrice.loc  [mBTC.pt     ]
-pOperReserveUp = pOperReserveUp.loc[mBTC.pt     ]
-pOperReserveDw = pOperReserveDw.loc[mBTC.pt     ]
-pURPrice       = pURPrice.loc      [mBTC.pt     ]
-pDRPrice       = pDRPrice.loc      [mBTC.pt     ]
+pORPrice       = pORPrice.loc      [mBTC.pt     ]
 
 # drop 0 values
 pPsui            = pPsui.loc           [pPsui != 0.0]
 pPQSlope         = pPQSlope.loc        [mBTC.gc     ]
 pPQYIntercept    = pPQYIntercept.loc   [mBTC.gc     ]
 pIndOperReserve  = pIndOperReserve.loc [mBTC.gc     ]
-pOperReserveCost = pOperReserveCost.loc[mBTC.gc     ]
 pCOP             = pCOP.loc            [mBTC.gh     ]
 
 # drop parameters that do not apply to heat pump units
@@ -270,8 +252,6 @@ pUpTime        = pUpTime.loc       [mBTC.g      ]
 pDwTime        = pDwTime.loc       [mBTC.g      ]
 pShutDownCost  = pShutDownCost.loc [mBTC.g      ]
 pCO2ERate      = pCO2ERate.loc     [mBTC.g      ]
-pOMVarCost     = pOMVarCost.loc    [mBTC.g      ]
-pN2Cost        = pN2Cost.loc       [mBTC.g      ]
 pPowerSyn      = pPowerSyn.loc     [mBTC.g      ]
 pStartUpCost   = pStartUpCost.loc  [mBTC.g      ]
 pSDDuration    = pSDDuration.loc   [mBTC.g      ]
@@ -344,8 +324,7 @@ mBTC.pDuration            = Param(mBTC.t     , initialize=pDuration.to_dict()   
 mBTC.pEnergyCost          = Param(mBTC.pt    , initialize=pEnergyCost.to_dict()         , within=NonNegativeReals,    doc='Energy cost'                           )
 mBTC.pEnergyPrice         = Param(mBTC.pt    , initialize=pEnergyPrice.to_dict()        , within=NonNegativeReals,    doc='Energy price'                          )
 mBTC.pFuelCost            = Param(mBTC.g     , initialize=pFuelCost.to_dict()           , within=NonNegativeReals,    doc='Fuel cost'                             )
-mBTC.pURPrice             = Param(mBTC.pt    , initialize=pURPrice.to_dict()            , within=NonNegativeReals,    doc='Upward   OR price'                     )
-mBTC.pDRPrice             = Param(mBTC.pt    , initialize=pDRPrice.to_dict()            , within=NonNegativeReals,    doc='Downward OR price'                     )
+mBTC.pORPrice             = Param(mBTC.pt    , initialize=pORPrice.to_dict()            , within=NonNegativeReals,    doc='OR price'                              )
 
 #Parameters
 mBTC.pPNSCost             = Param(             initialize=pPNSCost                      , within=NonNegativeReals,    doc='PNS cost'                              )
@@ -391,9 +370,6 @@ mBTC.pDwTime              = Param(mBTC.g     , initialize=pDwTime.to_dict()     
 mBTC.pShutDownCost        = Param(mBTC.g     , initialize=pShutDownCost.to_dict()       , within=NonNegativeReals,    doc='Shutdown cost'                         )
 mBTC.pSDDuration          = Param(mBTC.g     , initialize=pSDDuration.to_dict()         , within=NonNegativeIntegers, doc='Duration of SD l ramp process'         )
 mBTC.pCO2ERate            = Param(mBTC.g     , initialize=pCO2ERate.to_dict()           , within=NonNegativeReals,    doc='Emission Rate'                         )
-mBTC.pOMVarCost           = Param(mBTC.g     , initialize=pOMVarCost.to_dict()          , within=NonNegativeReals,    doc='O&M variable cost'                     )
-mBTC.pN2Cost              = Param(mBTC.g     , initialize=pN2Cost.to_dict()             , within=NonNegativeReals,    doc='Nitrogen cost'                         )
-mBTC.pOperReserveCost     = Param(mBTC.gc    , initialize=pOperReserveCost.to_dict()    , within=NonNegativeReals,    doc='Operating reserve cost'                )
 
 #StartUp
 mBTC.pPowerSyn            = Param(mBTC.gl    , initialize=pPowerSyn.to_dict()           , within=NonNegativeReals,    doc='P at which the unit is synchronized'   )
@@ -404,10 +380,6 @@ mBTC.pPsui                = Param(mBTC.glsui , initialize=pPsui.to_dict()       
 
 #ShutDown
 mBTC.pPsdi                = Param(mBTC.gsdi  , initialize=pPsdi.to_dict()               , within=NonNegativeReals,    doc='P at beginning of ith interval of SD'  )
-
-#OperatingReserves
-mBTC.pOperReserveUp       = Param(mBTC.pt    , initialize=pOperReserveUp.to_dict()      , within=NonNegativeReals,    doc='Upward   operating reserve'            )
-mBTC.pOperReserveDw       = Param(mBTC.pt    , initialize=pOperReserveDw.to_dict()      , within=NonNegativeReals,    doc='Downward operating reserve'            )
 
 
 ## Variables
@@ -422,7 +394,7 @@ mBTC.vQ                   = Var(mBTC.ptgc, within=NonNegativeReals, bounds=lambd
 mBTC.vPOutput             = Var(mBTC.ptgc, within=NonNegativeReals, bounds=lambda mBTC,p,t,gc:(0.0, mBTC.pMaxP            [gc]), doc='power output      at the end of t             [MW]')
 mBTC.vQOutput             = Var(mBTC.ptg , within=NonNegativeReals, bounds=lambda mBTC,p,t,g :(0.0, mBTC.pMaxQ            [g ]), doc='heat  output      at the end of t             [MW]')
 mBTC.vPFS                 = Var(mBTC.ptgc, within=           Reals                                                             , doc='BTC power output final schedule (after HP)    [MW]')
-mBTC.vQFS                 = Var(mBTC.ptgh, within=NonNegativeReals, bounds=lambda mBTC,p,t,gh:(0.0, mBTC.pMaxQ            [gh]), doc='HP  heat  output final schedule               [MW]')
+mBTC.vQFS                 = Var(mBTC.ptgg, within=NonNegativeReals, bounds=lambda mBTC,p,t,gg:(0.0, mBTC.pMaxQ            [gg]), doc='heat      output final schedule               [MW]')
 mBTC.vQHP                 = Var(mBTC.ptgh, within=NonNegativeReals, bounds=lambda mBTC,p,t,gh:(0.0, mBTC.pMaxPower2ndBlock[gh]), doc='heat output heat pump above min               [MW]')
 mBTC.vQInHP               = Var(mBTC.ptgh, within=NonNegativeReals, bounds=lambda mBTC,p,t,gh:(0.0,      pMaxQInHP        [gh]), doc='heat input  heat pump                         [MW]')
 mBTC.vQOutHP              = Var(mBTC.ptgh, within=NonNegativeReals, bounds=lambda mBTC,p,t,gh:(0.0, mBTC.pMaxQ            [gh]), doc='heat output heat pump                         [MW]')
@@ -449,12 +421,6 @@ for p,t,gc in mBTC.ptgc:
         mBTC.vReserveUp    [p,t,gc].fix(0.0)
         mBTC.vReserveDown  [p,t,gc].fix(0.0)
         nFixedVariables += 2
-    if mBTC.pOperReserveUp [p,t   ] ==  0.0:
-        mBTC.vReserveUp    [p,t,gc].fix(0.0)
-        nFixedVariables += 1
-    if mBTC.pOperReserveDw [p,t   ] ==  0.0:
-        mBTC.vReserveDown  [p,t,gc].fix(0.0)
-        nFixedVariables += 1
 
 for p,t,gh in mBTC.ptgh:
     if mBTC.pHPOperation != 1:
@@ -464,10 +430,19 @@ for p,t,gh in mBTC.ptgh:
         mBTC.vPInHP        [p,t,gh].fix(0.0)
         mBTC.vQFS          [p,t,gh].fix(0.0)
         mBTC.vQExcess      [p,t,gh].fix(0.0)
-        mBTC.vPFS          [p,t,gc].fix(0.0)
-        nFixedVariables += 7
+        nFixedVariables += 6
+
+for p,t,gh in mBTC.ptgh:
+    if mBTC.pHPOperation == 1:
+        mBTC.vQFS          [p,t,gc].fix(0.0)
+        nFixedVariables += 1
 
 mBTC.nFixedVariables = Param(initialize=round(nFixedVariables), within=NonNegativeIntegers, doc='Number of fixed variables')
+
+for p,t,gc in mBTC.ptgc:
+    if mBTC.pHPOperation != 1:
+        mBTC.vPFS[p,t,gc].setlb(0.0)
+        [mBTC.vPFS[p,t,gc].setub(mBTC.pMaxP[gc]) for gc in mBTC.gc]
 
 
 SettingUpDataTime = time.time() - StartTime
@@ -570,13 +545,13 @@ mBTC.eOperatingRampDw = Constraint(mBTC.ptg      , rule=eOperatingRampDw,   doc=
 
 def eTotalPOutputCHP(mBTC,p,t,gc):
     if t < (mBTC.t.last() - pMaxSUDuration_gc):
-        return mBTC.vTotalOutput[p,t,gc] == ((mBTC.pMinPower[gc] * (mBTC.vCommitment[p,t,gc] + mBTC.vStartUp[p,mBTC.t.next(t),gc])) + mBTC.vOutput[p,t,gc]   +
-                                             (mBTC.pUpReserveActivation * mBTC.vReserveUp[p,t,gc]) - (mBTC.pDwReserveActivation * mBTC.vReserveDown[p,t,gc]) +
+        return mBTC.vTotalOutput[p,t,gc] == ((mBTC.pMinPower[gc] * (mBTC.vCommitment[p,t,gc] + mBTC.vStartUp[p,mBTC.t.next(t),gc])) + mBTC.vOutput [p,t,gc]  +
+                                             + mBTC.vReserveUp[p,t,gc] - mBTC.vReserveDown[p,t,gc]                                                           +
                                              sum((mBTC.pPsdi[gc,i] * mBTC.vShutDown[p,(t-i+2),gc]) for i in range(2, int(pSDDuration[gc])+1))                +
                                              sum(sum((mBTC.pPsui[gc,lc,i] * mBTC.vSUType[p,(t-i+pSUDuration[gc,lc]+2),gc,lc]) for i in range(1,pSUDuration[gc,lc]+1)) for gc,lc in mBTC.gc*mBTC.lc))
     elif   (mBTC.t.last() - pMaxSUDuration_gc) <= t <= mBTC.t.last():
-        return mBTC.vTotalOutput[p,t,gc] == ((mBTC.pMinPower[gc]  * mBTC.vCommitment[p,t,gc])                                       + mBTC.vOutput[p,t,gc]   +
-                                             (mBTC.pUpReserveActivation * mBTC.vReserveUp[p,t,gc]) - (mBTC.pDwReserveActivation * mBTC.vReserveDown[p,t,gc]) +
+        return mBTC.vTotalOutput[p,t,gc] == ((mBTC.pMinPower[gc]  * mBTC.vCommitment[p,t,gc]) + mBTC.vOutput [p,t,gc]  +
+                                             + mBTC.vReserveUp[p,t,gc] - mBTC.vReserveDown[p,t,gc]                     +
                                              sum((mBTC.pPsdi[gc,i] * mBTC.vShutDown[p,(t-i+2),gc]) for i in range(2, int(pSDDuration[gc])+1)))
     else:
         return Constraint.Skip
@@ -625,66 +600,45 @@ mBTC.eEnergyProduction = Constraint(mBTC.ptg     , rule=eEnergyProduction,  doc=
 
 #OperatingReserves
 
-def eOperReserveUp(mBTC,p,t):
-    if mBTC.pIndOperReserve[gc] == 1:
-        return sum(mBTC.vReserveUp  [p,t,gc] for gc in mBTC.gc) >= mBTC.pOperReserveUp[p,t]
-    else:
-        return Constraint.Skip
-mBTC.eOperReserveUp = Constraint(mBTC.pt         , rule=eOperReserveUp,     doc='up   operating reserve [MW]')
-
-def eOperReserveDw(mBTC,p,t):
-    if mBTC.pIndOperReserve[gc] == 1:
-        return sum(mBTC.vReserveDown[p,t,gc] for gc in mBTC.gc) >= mBTC.pOperReserveDw[p,t]
-    else:
-        return Constraint.Skip
-mBTC.eOperReserveDw = Constraint(mBTC.pt         , rule=eOperReserveDw,     doc='down operating reserve [MW]')
-
 def eReserveMinRatioDwUp(mBTC,p,t,gc):
-    if mBTC.pIndOperReserve[gc] == 1:
-        return mBTC.vReserveDown[p,t,gc] >= mBTC.vReserveUp[p,t,gc] * mBTC.pMinRatioDwUp
-    else:
-        return Constraint.Skip
+    return mBTC.vReserveDown[p,t,gc] >= mBTC.vReserveUp[p,t,gc] * mBTC.pMinRatioDwUp
 mBTC.eReserveMinRatioDwUp = Constraint(mBTC.ptgc , rule=eReserveMinRatioDwUp, doc='minimum ratio down to up operating reserve [MW]')
 
 def eReserveMaxRatioDwUp(mBTC,p,t,gc):
-    if mBTC.pIndOperReserve[gc] == 1:
-        return mBTC.vReserveDown[p,t,gc] <= mBTC.vReserveUp[p,t,gc] * mBTC.pMaxRatioDwUp
-    else:
-        return Constraint.Skip
+    return mBTC.vReserveDown[p,t,gc] <= mBTC.vReserveUp[p,t,gc] * mBTC.pMaxRatioDwUp
 mBTC.eReserveMaxRatioDwUp = Constraint(mBTC.ptgc , rule=eReserveMaxRatioDwUp, doc='maximum ratio down to up operating reserve [MW]')
 
 
 #PowerBalance
 
-
-def eCHPBalance1(mBTC,p,t,gc):
+def ePOutput(mBTC,p,t,gc):
     return mBTC.vPOutput[p,t,gc] == mBTC.vP[p,t,gc] + (mBTC.pMinP[gc] * mBTC.vCommitment[p,t,gc])
-mBTC.eCHPBalance1 = Constraint(mBTC.ptgc         , rule=eCHPBalance1,       doc='CHP electric power balance [MW]')
+mBTC.ePOutput = Constraint(mBTC.ptgc             , rule=ePOutput,           doc='CHP electric power balance [MW]')
 
-def eCHPBalance2(mBTC,p,t,gc):
+def eQOutput(mBTC,p,t,gc):
     return mBTC.vQOutput[p,t,gc] == mBTC.vQ[p,t,gc] + (mBTC.pMinQ[gc] * mBTC.vCommitment[p,t,gc])
-mBTC.eCHPBalance2 = Constraint(mBTC.ptgc         , rule=eCHPBalance2,       doc='CHP thermal power balance [MW]')
+mBTC.eQOutput = Constraint(mBTC.ptgc             , rule=eQOutput,           doc='CHP thermal power balance [MW]')
 
 def ePQCurve(mBTC,p,t,gc):
     return mBTC.vP[p,t,gc] == mBTC.pPQSlope[gc] * mBTC.vQ[p,t,gc]
 mBTC.ePQCurve = Constraint(mBTC.ptgc             , rule=ePQCurve,           doc='BTC PQ relation [MW]')
 
 def eBTCBalance1(mBTC,p,t,gc):
-    return mBTC.vTotalOutput[p,t,gc] == mBTC.vPOutput[p,t,gc] + mBTC.vQOutput[p,t,gc]
+    return mBTC.vTotalOutput[p,t,gc] == mBTC.vPOutput[p,t,gc] + mBTC.vQOutput[p,t,gc] + mBTC.vReserveUp[p,t,gc] - mBTC.vReserveDown[p,t,gc]
 mBTC.eBTCBalance1 = Constraint(mBTC.ptgc         , rule=eBTCBalance1,       doc='BTC output balance 1 [MW]')
 
 def eBTCBalance2(mBTC,p,t,gc):
     if mBTC.pHPOperation == 1:
-        return mBTC.vPOutput[p,t,gc] == mBTC.vPInHP[p,t,gh] + mBTC.vPFS[p,t,gc]
+        return mBTC.vPOutput[p,t,gc] == mBTC.vPFS[p,t,gc] + mBTC.vPInHP[p,t,gh]
     else:
-        return Constraint.Skip
+        return mBTC.vPOutput[p,t,gc] == mBTC.vPFS[p,t,gc]
 mBTC.eBTCBalance2 = Constraint(mBTC.ptgc         , rule=eBTCBalance2,       doc='BTC output balance 2 [MW]')
 
 def eBTCBalance3(mBTC,p,t,gc):
     if mBTC.pHPOperation == 1:
         return mBTC.vQOutput[p,t,gc] == mBTC.vQInHP[p,t,gh] + mBTC.vQExcess[p,t,gc]
     else:
-        return Constraint.Skip
+        return mBTC.vQOutput[p,t,gc] == mBTC.vQFS  [p,t,gc] + mBTC.vQExcess[p,t,gc]
 mBTC.eBTCBalance3 = Constraint(mBTC.ptgc         , rule=eBTCBalance3,       doc='BTC output balance 3 [MW]')
 
 def eHPBalance(mBTC,p,t,gh):
@@ -715,25 +669,23 @@ def eHPBalance3(mBTC,p,t,gh):
 mBTC.eHPBalance3 = Constraint(mBTC.ptgh          , rule=eHPBalance3,        doc='heat pump balance 3 [MW]')
 
 def eXBalance(mBTC,p,t,gx):
-    return mBTC.vTotalOutput[p,t,gx] == mBTC.vQOutput[p,t,gx] + mBTC.vQExcess[p,t,gx]
+    return mBTC.vTotalOutput[p,t,gx] == mBTC.vQFS[p,t,gx] + mBTC.vQExcess[p,t,gx]
 mBTC.eXBalance = Constraint(mBTC.ptgx            , rule=eXBalance,          doc='thermal units output balance [MW]')
 
 def ePBalance(mBTC,p,t):
-    if mBTC.pHPOperation == 1:
-        return (sum(mBTC.vPFS[p,t,gc]     for gc in mBTC.gc) + mBTC.vPowerBuy[p,t] - mBTC.vPowerSell[p,t]) == mBTC.pPDemand[p,t]
-    else:
-        return (sum(mBTC.vPOutput[p,t,gc] for gc in mBTC.gc) + mBTC.vPowerBuy[p,t] - mBTC.vPowerSell[p,t]) == mBTC.pPDemand[p,t]
+    return (sum(mBTC.vPFS[p,t,gc] for gc in mBTC.gc) + mBTC.vPowerBuy[p,t] - mBTC.vPowerSell[p,t]) == mBTC.pPDemand[p,t]
 mBTC.ePBalance = Constraint(mBTC.pt              , rule=ePBalance,          doc='electric power balance [MW]')
 
+def eGridConnection(mBTC,p,t):
+    return mBTC.vPowerBuy[p,t] + mBTC.vPowerSell[p,t] <= mBTC.pGCPCapacity
+mBTC.eGridConnection = Constraint(mBTC.pt        , rule=eGridConnection,    doc='grid connection limit [MW]')
+
 def eQBalance(mBTC,p,t):
-    if mBTC.pHPOperation == 1:
-        return (sum(mBTC.vQOutput[p,t,gx] for gx in mBTC.gx)) + (sum(mBTC.vQFS[p,t,gh] for gh in mBTC.gh)) == mBTC.pQDemand[p,t]
-    else:
-        return (sum(mBTC.vQOutput[p,t,g ] for g  in mBTC.g ))                                              == mBTC.pQDemand[p,t]
+    return (sum(mBTC.vQFS[p,t,gg] for gg in mBTC.gg)) == mBTC.pQDemand[p,t]
 mBTC.eQBalance = Constraint(mBTC.pt              , rule=eQBalance,          doc='thermal power balance [MW]')
 
 def eFuelFlow(mBTC,p,t,g):
-    return mBTC.vFuel[p,t,g] == mBTC.vEnergy[p,t,g] / mBTC.pEfficiency[g]
+    return mBTC.vFuel[p,t,g] == (mBTC.vEnergy[p,t,g]) / mBTC.pEfficiency[g]
 mBTC.eFuelCost = Constraint(mBTC.ptg,              rule=eFuelFlow,          doc='fuel flow')
 
 
@@ -802,20 +754,18 @@ mBTC.eIniSUType4 = Constraint(mBTC.ptgxlx        , rule=eIniSUType4,        doc=
 
 def eIncome(mBTC,p,t):
     return mBTC.vIncome[p,t] ==     ((mBTC.pEnergyPrice[p,t] * mBTC.pDuration[t] * mBTC.vPowerSell  [p,t   ]) +
-                                 sum((mBTC.pURPrice    [p,t]                     * mBTC.vReserveUp  [p,t,gc]) +
-                                     (mBTC.pDRPrice    [p,t]                     * mBTC.vReserveDown[p,t,gc]) for gc in mBTC.gc if mBTC.pIndOperReserve[gc] == 1))
+                                 sum((mBTC.pORPrice    [p,t]                     * mBTC.vReserveUp  [p,t,gc]) +
+                                     (mBTC.pORPrice    [p,t]                     * mBTC.vReserveDown[p,t,gc]) for gc in mBTC.gc if mBTC.pIndOperReserve[gc] == 1))
 mBTC.eIncome = Constraint(mBTC.pt                , rule=eIncome,            doc='hourly system income [EUR]')
 
 def eCost(mBTC,p,t):
-    return mBTC.vCost[p,t] == (sum(((mBTC.pFuelCost            [g    ]                                                              * mBTC.vFuel       [p,t,g    ])                                 +
-                               sum( (mBTC.pStartUpCost         [gc,lc]                                                              * mBTC.vSUType     [p,t,gc,lc])  for gc,lc  in mBTC.gc*mBTC.lc) +
-                               sum( (mBTC.pStartUpCost         [gx,lx]                                                              * mBTC.vSUType     [p,t,gx,lx])  for gx,lx  in mBTC.gx*mBTC.lx) +
-                                    (mBTC.pShutDownCost        [g    ]                                                              * mBTC.vShutDown   [p,t,g    ])                                 +
-                                  (((mBTC.pCO2Cost * mBTC.pCO2ERate[g]) + mBTC.pOMVarCost[g] + mBTC.pN2Cost[g]) * mBTC.pDuration[t] * mBTC.vTotalOutput[p,t,g    ])) for g      in mBTC.g         ) +
-                               sum( (mBTC.pQNSCost                                                              * mBTC.pDuration[t] * mBTC.vQExcess    [p,t,gg   ])  for gg     in mBTC.gg        ) +
-                                    (mBTC.pEnergyCost          [p,t  ]                                          * mBTC.pDuration[t] * mBTC.vPowerBuy   [p,t      ])                                 +
-                               sum( (mBTC.pOperReserveCost     [gc   ]                                                              * mBTC.vReserveUp  [p,t,gc   ])                                 +
-                                    (mBTC.pOperReserveCost     [gc   ]                                                              * mBTC.vReserveDown[p,t,gc   ])  for gc in mBTC.gc if mBTC.pIndOperReserve[gc] == 1))
+    return mBTC.vCost[p,t] == (sum(((mBTC.pFuelCost            [g    ]                      * mBTC.vFuel       [p,t,g    ])                                 +
+                               sum( (mBTC.pStartUpCost         [gc,lc]                      * mBTC.vSUType     [p,t,gc,lc])  for gc,lc  in mBTC.gc*mBTC.lc) +
+                               sum( (mBTC.pStartUpCost         [gx,lx]                      * mBTC.vSUType     [p,t,gx,lx])  for gx,lx  in mBTC.gx*mBTC.lx) +
+                                    (mBTC.pShutDownCost        [g    ]                      * mBTC.vShutDown   [p,t,g    ])                                 +
+                                  ( (mBTC.pCO2Cost * mBTC.pCO2ERate[g]) * mBTC.pDuration[t] * mBTC.vTotalOutput[p,t,g    ])) for g      in mBTC.g         ) +
+                               sum( (mBTC.pQNSCost                      * mBTC.pDuration[t] * mBTC.vQExcess    [p,t,gg   ])  for gg     in mBTC.gg        ) +
+                                    (mBTC.pEnergyCost          [p,t  ]  * mBTC.pDuration[t] * mBTC.vPowerBuy   [p,t      ]))
 mBTC.eCost = Constraint(mBTC.pt                  , rule=eCost,              doc='hourly system cost [EUR]')
 
 def eTotalIncome(mBTC):
@@ -917,16 +867,28 @@ OutputResults = pd.Series(data=[mBTC.vOnlineStates[p,t,g]() for p,t,g in mBTC.pt
 OutputResults.to_frame(   name='p.u.').reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='p.u.').rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'Online {x}'            ).to_csv(_path+'/BTC_Result_OnlineStates_' +CaseName+'.csv', sep=',')
 
 OutputResults = pd.Series(data=[mBTC.vPowerBuy[p,t]()       for p,t   in mBTC.pt],             index=pd.MultiIndex.from_tuples(mBTC.pt))
-OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'],                    values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'PowerBuy {x}'     ).to_csv(_path+'/BTC_Result_PowerBuy_'     +CaseName+'.csv', sep=',')
+OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'],                    values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'PowerBuy {x}'          ).to_csv(_path+'/BTC_Result_PowerBuy_'     +CaseName+'.csv', sep=',')
 
 OutputResults = pd.Series(data=[mBTC.vPowerSell[p,t]()      for p,t   in mBTC.pt],             index=pd.MultiIndex.from_tuples(mBTC.pt))
-OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1']                   , values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'PowerSell {x}'    ).to_csv(_path+'/BTC_Result_PowerSell_'    +CaseName+'.csv', sep=',')
+OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1']                   , values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'PowerSell {x}'         ).to_csv(_path+'/BTC_Result_PowerSell_'    +CaseName+'.csv', sep=',')
 
 OutputResults = pd.Series(data=[mBTC.vPOutput[p,t,gc]()     for p,t,gc in mBTC.ptgc],          index=pd.MultiIndex.from_tuples(mBTC.ptgc))
 OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'POutput {x} [MW]'      ).to_csv(_path+'/BTC_Result_PowerOutput_'  +CaseName+'.csv', sep=',')
 
+OutputResults = pd.Series(data=[mBTC.vPFS[p,t,gc]()         for p,t,gc in mBTC.ptgc],          index=pd.MultiIndex.from_tuples(mBTC.ptgc))
+OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'PFS {x} [MW]'          ).to_csv(_path+'/BTC_Result_PowerFS_'      +CaseName+'.csv', sep=',')
+
 OutputResults = pd.Series(data=[mBTC.vQOutput[p,t,g]()      for p,t,g in mBTC.ptg],            index=pd.MultiIndex.from_tuples(mBTC.ptg))
 OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'QOutput {x} [MW]'      ).to_csv(_path+'/BTC_Result_HeatOutput_'   +CaseName+'.csv', sep=',')
+
+OutputResults = pd.Series(data=[mBTC.vReserveUp[p,t,gc]()   for p,t,gc in mBTC.ptgc],          index=pd.MultiIndex.from_tuples(mBTC.ptgc))
+OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'ReserveUp {x} [MW]'    ).to_csv(_path+'/BTC_Result_ReserveUp_'   +CaseName+'.csv', sep=',')
+
+OutputResults = pd.Series(data=[mBTC.vReserveDown[p,t,gc]() for p,t,gc in mBTC.ptgc],          index=pd.MultiIndex.from_tuples(mBTC.ptgc))
+OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'ReserveDw {x} [MW]'    ).to_csv(_path+'/BTC_Result_ReserveDw_'   +CaseName+'.csv', sep=',')
+
+OutputResults = pd.Series(data=[mBTC.vQFS[p,t,gg]()         for p,t,gg in mBTC.ptgg],          index=pd.MultiIndex.from_tuples(mBTC.ptgg))
+OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'QFS {x} [MW]'          ).to_csv(_path+'/BTC_Result_HeatFS_'       +CaseName+'.csv', sep=',')
 
 OutputResults = pd.Series(data=[mBTC.vQExcess[p,t,gg]()     for p,t,gg in mBTC.ptgg],          index=pd.MultiIndex.from_tuples(mBTC.ptgg))
 OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'QExcess {x} [MW]'      ).to_csv(_path+'/BTC_Result_HeatExcess_'   +CaseName+'.csv', sep=',')
@@ -951,11 +913,6 @@ if mBTC.pHPOperation == 1:
     OutputResults = pd.Series(data=[mBTC.vQOutHP[p,t,gh]()      for p,t,gh in mBTC.ptgh],          index=pd.MultiIndex.from_tuples(mBTC.ptgh))
     OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'QOutHP {x} [MW]'       ).to_csv(_path+'/BTC_Result_HeatOutHP_'    +CaseName+'.csv', sep=',')
 
-    OutputResults = pd.Series(data=[mBTC.vQFS[p,t,gh]()         for p,t,gh in mBTC.ptgh],          index=pd.MultiIndex.from_tuples(mBTC.ptgh))
-    OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'QFS {x} [MW]'          ).to_csv(_path+'/BTC_Result_HeatFS_'       +CaseName+'.csv', sep=',')
-
-    OutputResults = pd.Series(data=[mBTC.vPFS[p,t,gc]()         for p,t,gc in mBTC.ptgc],          index=pd.MultiIndex.from_tuples(mBTC.ptgc))
-    OutputResults.to_frame(   name='MW'  ).reset_index().pivot_table( index=['level_0','level_1'], columns='level_2', values='MW'  ).rename_axis(['Period','LoadLevel'], axis=0).rename_axis([None], axis=1).rename(columns=lambda x: f'PFS {x} [MW]'          ).to_csv(_path+'/BTC_Result_PowerFS_'      +CaseName+'.csv', sep=',')
 
 # Creating a dataframe with all output results
 
@@ -970,7 +927,11 @@ dfSUType            = pd.read_csv(_path + '/BTC_Result_SUType_'         + CaseNa
 dfPowerBuy          = pd.read_csv(_path + '/BTC_Result_PowerBuy_'       + CaseName + '.csv', index_col=[0, 1])
 dfPowerSell         = pd.read_csv(_path + '/BTC_Result_PowerSell_'      + CaseName + '.csv', index_col=[0, 1])
 dfPOutput           = pd.read_csv(_path + '/BTC_Result_PowerOutput_'    + CaseName + '.csv', index_col=[0, 1])
+dfPFS               = pd.read_csv(_path + '/BTC_Result_PowerFS_'        + CaseName + '.csv', index_col=[0, 1])
+dfReserveUp         = pd.read_csv(_path + '/BTC_Result_ReserveUp_'      + CaseName + '.csv', index_col=[0, 1])
+dfReserveDw         = pd.read_csv(_path + '/BTC_Result_ReserveDw_'      + CaseName + '.csv', index_col=[0, 1])
 dfQOutput           = pd.read_csv(_path + '/BTC_Result_HeatOutput_'     + CaseName + '.csv', index_col=[0, 1])
+dfQFS               = pd.read_csv(_path + '/BTC_Result_HeatFS_'         + CaseName + '.csv', index_col=[0, 1])
 dfQExcess           = pd.read_csv(_path + '/BTC_Result_HeatExcess_'     + CaseName + '.csv', index_col=[0, 1])
 dfFuelCost          = pd.read_csv(_path + '/BTC_Result_FuelCost_'       + CaseName + '.csv', index_col=[0, 1])
 dfCosts             = pd.read_csv(_path + '/BTC_Result_Costs_'          + CaseName + '.csv', index_col=[0, 1])
@@ -980,8 +941,6 @@ if mBTC.pHPOperation == 1:
     dfHeatInHP      = pd.read_csv(_path + '/BTC_Result_HeatInHP_'       + CaseName + '.csv', index_col=[0, 1])
     dfPowerInHP     = pd.read_csv(_path + '/BTC_Result_PowerInHP_'      + CaseName + '.csv', index_col=[0, 1])
     dfHeatOutHP     = pd.read_csv(_path + '/BTC_Result_HeatOutHP_'      + CaseName + '.csv', index_col=[0, 1])
-    dfHeatFS        = pd.read_csv(_path + '/BTC_Result_HeatFS_'         + CaseName + '.csv', index_col=[0, 1])
-    dfPowerFS       = pd.read_csv(_path + '/BTC_Result_PowerFS_'        + CaseName + '.csv', index_col=[0, 1])
 
 if mBTC.pHPOperation == 1:
     dfs = [dfOnlineStates,
@@ -997,13 +956,13 @@ if mBTC.pHPOperation == 1:
            dfPowerSell,
            dfPOutput,
            dfPowerInHP,
-           dfPowerFS,
+           dfPFS,
            dfDemand['PDemand'],
            dfQOutput,
            dfHeatInHP,
            dfHeatOutHP,
            dfQExcess,
-           dfHeatFS,
+           dfQFS,
            dfDemand['QDemand'],
            dfCosts,
            dfIncomes]
@@ -1020,8 +979,12 @@ else:
            dfPowerBuy,
            dfPowerSell,
            dfPOutput,
+           dfPFS,
+           dfReserveUp,
+           dfReserveDw,
            dfDemand['PDemand'],
            dfQOutput,
+           dfQFS,
            dfQExcess,
            dfDemand['QDemand'],
            dfCosts,
