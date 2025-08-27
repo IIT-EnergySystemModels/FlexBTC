@@ -1,5 +1,5 @@
 # FlexBTC 
-### _Optimization model for the operation of a flexible biomass-fired cogeneration unit with industrial applications_
+### _Optimization model for the operation of a flexible biomass-fired top cycle unit coupled with steam generating heat pumps for industrial applications_
 
 $~$
 
