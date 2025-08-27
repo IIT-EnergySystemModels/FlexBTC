@@ -1,5 +1,0 @@
-,,StartUpCost,PowerSyn,SUDuration,OffDuration
-BTC,1_Hot,775,0.001,2,4
-BTC,2_Warm,829,0.001,15,5
-BTC,3_Cold,845,0.001,20,24
-Boiler,1_X,200,0.001,2,4
