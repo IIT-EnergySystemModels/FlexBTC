@@ -871,7 +871,7 @@ mBTC.write(_path+'/BTC_'+CaseName+'.lp', io_options={'symbolic_solver_labels': T
 Solver = SolverFactory(SolverName)                                                      # select solver
 Solver.options['LogFile'       ] = _path+'/BTC_'+CaseName+'.log'
 Solver.options['OutputFlag'    ] = 1
-Solver.options['IISFile'       ] = _path+'/BTC_'+CaseName+'.ilp'                        # should be uncommented to show results of IIS
+# Solver.options['IISFile'       ] = _path+'/BTC_'+CaseName+'.ilp'                        # should be uncommented to show results of IIS
 Solver.options['Method'        ] = 2                                                    # barrier method
 Solver.options['MIPGap'        ] = 0.01
 Solver.options['Threads'       ] = int((psutil.cpu_count(logical=True) + psutil.cpu_count(logical=False))/2)
@@ -892,8 +892,8 @@ for p,t,gc in mBTC.ptgc:
 for p,t,g,l in mBTC.ptgl:
     mBTC.vSUType    [p,t,g,l].fix(round(mBTC.vSUType     [p,t,g,l]()))
 
-Solver.options['relax_integrality'] = 1                                                 # introduced to show results of the dual variables
-mBTC.dual = Suffix(direction=Suffix.IMPORT)
+# Solver.options['relax_integrality'] = 1                                                 # introduced to show results of the dual variables
+# mBTC.dual = Suffix(direction=Suffix.IMPORT)
 SolverResults = Solver.solve(mBTC, tee=False)                                           # tee=True displays the output of the solver
 SolverResults.write()                                                                   # summary of the solver results
 
