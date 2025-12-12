@@ -636,13 +636,6 @@ def eMaxActivationDw(mBTC,p,t,gc):
     return mBTC.vActivationDown[p,t,gc]    <= (1 - mBTC.vActivation[p,t,gc]) * mBTC.pDuration[t] * mBTC.pMaxP2ndBlock[gc]
 mBTC.eMaxActivationDw = Constraint(mBTC.ptgc     , rule=eMaxActivationDw,   doc='max activation dw [MWh]')
 
-def eMinActivationDw(mBTC,p,t,gc):
-    if mBTC.pIndOperReserve[gc] == 1:
-        return mBTC.vActivationDown[p,t,gc] >= (1 - mBTC.vActivation[p,t,gc]) * mBTC.pDuration[t] * 0.001
-    else:
-        return Constraint.Skip
-mBTC.eMinActivationDw = Constraint(mBTC.ptgc     , rule=eMinActivationDw,   doc='min activation dw [MWh]')
-
 
 #PowerSchedule
 
